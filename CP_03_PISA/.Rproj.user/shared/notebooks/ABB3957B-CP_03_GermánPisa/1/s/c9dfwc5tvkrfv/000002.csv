@@ -1,0 +1,7 @@
+"0",""
+"0","gamPisa <- gam(overall ~ s(edu, 3) + s(hdi, 1) + s(health, 1) + s(support, 1) +"
+"0","             s(interest, 4), data = pisa)"
+"0",""
+"0","par(mfrow=c(2, 3))"
+"0","plot(gamPisa, se = TRUE)"
+"2","NaNs produced"

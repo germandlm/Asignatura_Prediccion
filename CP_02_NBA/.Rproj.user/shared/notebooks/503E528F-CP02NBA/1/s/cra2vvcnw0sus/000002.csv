@@ -1,0 +1,6 @@
+"0","cv_lasso   <- cv.glmnet(nba_train_x, nba_train_y, alpha = 1.0)"
+"0","min(cv_lasso$cvm)"
+"1","[1]"
+"1"," 0.005937828"
+"1","
+"

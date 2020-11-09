@@ -1,0 +1,6 @@
+"0","model_vif <- lm(salary~.-player-nba_country-tm, data=log_data)"
+"0",""
+"0","vif_values <- car::vif(model_vif)"
+"0",""
+"0","#create horizontal bar chart to display each VIF value"
+"0","barplot(vif_values, main = ""VIF Values"", horiz = TRUE, col = ""steelblue"")"

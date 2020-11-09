@@ -1,0 +1,8 @@
+"0",""
+"0","pisa <- raw_data"
+"0",""
+"0","# Correlaciones"
+"0","corrplot(cor(pisa %>% "
+"0","               select_at(vars(-country)), "
+"0","             use = ""complete.obs""), "
+"0","         method = ""circle"",type = ""upper"")"

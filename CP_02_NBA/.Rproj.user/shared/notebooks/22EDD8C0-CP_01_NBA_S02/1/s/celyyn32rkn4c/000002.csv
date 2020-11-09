@@ -1,0 +1,4 @@
+"0","raw_data <-  read.csv(""nba.csv"")"
+"2","no fue posible abrir el archivo 'nba.csv': No such file or directory"
+"2","Error in file(file, ""rt"") : no se puede abrir la conexión
+"
