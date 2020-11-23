@@ -1,0 +1,272 @@
+---
+title: "CP 05 COLGATE - CREST"
+author: "German de los Mozos"
+date: "21/11/2020"
+output: html_document
+---
+El objetivo es predecir las 16 semanas del año 1963, para las dos cuotas de mercado, por lo que se dejará fuera de la muestra este periodo muestral.
+
+El análisis debe incluir para las dos series la estimación de un modelo ARIMA, la detección de atípicos/outlier y un modelo de interveción. Por último se debe realizar un modelo de función de tranferencia entre las dos cuotas.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r warning=FALSE, message=FALSE, echo=FALSE}
+library(readr)
+library(openxlsx)
+library(skimr)
+library(fpp2)
+library(tidyverse)
+library(dplyr)
+library(MASS)
+library(ggplot2)
+library(zoo) #Zoo format
+library(ggfortify)
+library(forecast)
+library(tsoutliers)#outliers
+library(TSA)# "Time Series Analysis
+library(xts)#Timeseries
+library(normtest)
+library(tseries)
+library(Hmisc)
+library(astsa)
+```
+
+## R Markdown
+
+
+
+```{r echo=FALSE}
+df<-read.xlsx('data.xlsx')
+
+df$Fecha <- as.Date(paste(df$Year,df$Week,1, sep = '-'), "%Y-%U-%u")
+```
+
+## Breve EDA
+```{r}
+skim(df)
+```
+
+
+
+## Separamos los datos tanto de colgate como de Crest.
+
+```{r , echo=FALSE}
+colgate <- ts(df$Colgate, start=1958,frequency = 52)
+crest <- ts(df$Crest, start = 1958, frequency =52)
+
+```
+
+
+
+#### Convertimos los datos a formato zoo para poder trabajarlos mejor
+
+```{r , echo=FALSE}
+acolgate <- as.zoo(colgate)
+acrest <- as.zoo(crest)
+```
+
+
+#### Graficamos ambas series
+
+```{r , echo=FALSE}
+
+autoplot(acolgate)+ggtitle("Colgate ")+ xlab("Semanas") + ylab("Cuota de Mercado")
+autoplot(acrest) + ggtitle("Crest") + xlab("Semanas") + ylab("Cuota de Mercado")
+
+```
+
+
+
+
+##### A continuación mediante el test Dickey AFuller comprobartemos la posible existencia dentro en las series
+
+
+```{r}
+adf.test(acolgate)
+adf.test(acrest)
+```
+
+ Ninguno de los 2 valores supera el margen de significación marcado, por lo que se concluye la no existencia de estacionaridad. Es decir, no hay constancia ni en la media ni en lavarianza.
+
+#### Eliminamos las semanas correspondientes al año 1963 las cuales formarán parte de nuestro test
+
+```{r , echo=FALSE}
+cOmit=16                             #Formarán parte del test
+
+nObsColgate=length(acolgate)
+nObsCrest= length(acrest)
+```
+
+
+
+#### Seleccionamos el train
+
+```{r , echo=FALSE}
+colgatet <- window(acolgate, start=index(acolgate[1]),end = index(acolgate[nObsColgate- cOmit]))
+crestt <- window(acrest, star= index(acrest[1]), end = index(acrest[nObsCrest-cOmit]))
+
+```
+
+
+
+Modelo ARIMA
+
+
+Los conjuntos de datos de series cronológicas pueden contener tendencias y estacionalidad, que tal vez sea necesario eliminar antes de la elaboración de modelos.
+
+Las tendencias pueden dar lugar a una media variable a lo largo del tiempo, mientras que la estacionalidad puede dar lugar a una variación cambiante a lo largo del tiempo, lo que define a una serie temporal como no estacionaria. 
+
+Los conjuntos de datos estacionarios son los que tienen una media y una varianza estables, y a su vez son mucho más fáciles de modelar. Por ello, vamos a hacer nuestras series estacionarias.
+
+```{r echo=FALSE}
+ggtsdisplay(diff(acolgate))
+```
+
+```{r echo=FALSE}
+ggtsdisplay(diff(acrest))
+```
+Especificamos el modelo Arima, indicando que queremos que se trabaje sin lambda ya que la varianza es más o menos cte, que nos indica que se trabaja con el logartimo. Posteriormente, mostramos un resumen del mejor modelo Arima.
+
+
+## Selección del lambda
+
+Para seleccionar el lambda lo miramos por el BoxCox
+
+```{r , echo=FALSE}
+fit_colgate <- auto.arima(colgatet, lambda = 'auto') #Automatización de los coeficientes
+summary(fit_colgate)
+
+fit_crest <- auto.arima(crestt, lambda = 'auto')
+summary(fit_crest)
+
+```
+El modelo ARIMA que se estima para la serie de Crest es en la parte parte regular se ha tenido que aplicar 1 diferencia para hacerlo estacionario y una media móvil de orden 1. Y sin estructura en la parte estacional.
+
+#### Gráficos de los residuos
+
+Lo que nos interesa es que los errores sean ruido blanco.
+
+```{r , echo=FALSE}
+ggtsdisplay(fit_colgate$residuals,
+            main = "Residuos de ARIMA en Colgate") 
+ggtsdisplay(fit_crest$residuals,
+            main = "Residuos de ARIMA en Crest") 
+```
+## Análisis de los Residuos
+```{r}
+#box-Ljung Test
+Box.test(fit_colgate$residuals,lag=4, fitdf=3, type="Lj")
+```
+No rechazamosla hipótesis nula, ya que el p-value es mayor a 0.05 que indica que nuestro error es ruido blanco.
+
+```{r}
+jb.norm.test(fit_colgate$residuals, nrepl=200000)
+```
+
+```{r}
+#Predecimos los meses
+fColgate.arima<-forecast(fit_colgate,h=16)#horizonte de 16 semanas
+df_new <- data.frame(value = as.vector(acolgate), time = time(acolgate)) 
+ggplot(df_new)+geom_point(aes(x=time,y=value))+geom_line(aes(x=time,y=value))+ geom_forecast(fColgate.arima,alpha=0.4)+xlab("Fecha")+ylab("Colgate")+ggtitle(": Predicción Colgate") + theme_bw() 
+fColgate.arima
+```
+
+
+En este gráfico observamos que la línea de color negro es el valor real, mientras que la azul es la predicción , con los intervalos de confianza también en azul. De modo que nos hacemos una idea de la predicción de nuestro modelo. En este caso vemos como se trata de un escalón, donde se recupera la serie original.
+
+```{r echo=FALSE}
+fCrest.arima<-forecast(fit_crest,h=16) #horizonte de 16 semanas.
+df_new <- data.frame(value = as.vector(acrest), time = time(acrest)) 
+ggplot(df_new)+geom_point(aes(x=time,y=value))+geom_line(aes(x=time,y=value))+ geom_forecast(fCrest.arima,alpha=0.4)+xlab("Fecha")+ylab("Colgate")+ggtitle(": Predicción Colgate") + theme_bw() 
+fColgate.arima
+```
+En este caso  una función escalón, que genera un impulso positivo ascendente.
+
+
+## Outliers
+
+Obtenemos los outliers aditivos e innovativos
+
+```{r , echo=FALSE}
+detectAO(fit_colgate) 
+detectAO(fit_crest) 
+detectIO(fit_colgate) 
+detectIO(fit_crest)
+```
+
+
+
+## ARIMAX
+
+```{r , echo=FALSE}
+arimax_colgate <- arimax(as.double(acolgate), 
+                         order = c(0,1,1),
+                         xtransf = data.frame(A60_step = 1*(seq(acolgate) > 102),
+                                              A60_pulse = 1*(seq(acolgate) == 102)),
+                         transfer = list(c(0,0), c(1,0)),
+                         method = "ML")
+arimax_colgate
+```
+Graficamos el ajuste
+
+```{r echo=FALSE}
+plot(colgatet)
+points(fitted(arimax_colgate), col = 'coral3')
+arimax_colgate$coef
+```
+
+```{r , echo=FALSE}
+arimax_crest <- arimax(as.double(crestt), 
+                       order = c(0,1,1),
+                       xtransf = data.frame(A60_step = 1*(seq(crestt) ),
+                                            A60_pulse = 1*(seq(crestt) )),
+                       xreg = data.frame(A60_2 = 1*(seq(crestt) == c(135,136))),
+                       transfer = list(
+                         c(0,0),
+                         c(1,0)
+                       ),
+                       method = 'ML')
+arimax_crest
+```
+
+
+```{r , echo=FALSE}
+detectAO(arimax_colgate) 
+detectIO(arimax_colgate) 
+detectAO(arimax_crest)
+detectIO(arimax_crest)
+```
+
+# Función de transferencia
+Colgate en función de crest
+
+```{r , echo=FALSE}
+transferencia <- arimax(as.double(colgatet),
+                        order = c(0,1,1), 
+                        include.mean = TRUE,
+                        xtransf = crestt, 
+                        transfer = list(c(0,0)), 
+                        method = "ML")
+transferencia
+```
+
+Graficamos los residuos.
+
+``` {r echo=FALSE}
+summary(transferencia)
+ggtsdisplay(transferencia$residuals)
+plot(transferencia$coef[2:17], type="h")
+```
+
+## CONCLUSIONES
+
+- El negocio de las pastas dentríficas no es estacional ni estacionario.
+
+- La noticia publicada el 1 de agosto de 1960, por el Consejo de Terapéutica Dental de la *American Dental Association (ADA)* aprobando a Crest como una “ayuda importante en cualquier programa de higiene dental” influyó tanto en la cuota de mercado de Crest como en la del Colgate.
+
+- Por último, se ha demostrado mediante la función de transferencia que es negativa, que el incremento de la cuota de mercado en Crest produjo un efecto negativo en el Colgate.
+
+
