@@ -1,0 +1,139 @@
+---
+title: "CP 07 BMW VOLKSWAGEN"
+author: "German de los Mozos"
+date: "13/12/2020"
+output:
+  html_document:
+    toc: yes
+    df_print: paged
+  html_notebook:
+    highlight: kate
+    toc: yes
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+# Objetivo
+
+El objetivo del presente informe es realizar un modelo Causal Impact entre las series temporales del precio de la acción de las empresas BMW y Volkswagen.
+
+Utilizando datos diarios de los dos series desde el año 2014, debemos analizar la relación entre BMW y Volkswagen utilizando el modelo de Causal Impact, para estimar el efecto del diesel gate.
+
+```{r warning=FALSE, echo=FALSE, message=FALSE}
+library(tidyverse)
+library(broom)
+library(flextable)
+library(mgcv)
+library(reshape2)
+library(readr)
+library(ggplot2)
+library(skimr)
+require(forecast)
+require(xts)
+library(ggfortify)
+library(rmdformats)
+library(TSA)
+library(zoo)
+library(Hmisc)
+library(astsa)
+library(quantmod)
+library(forecast)
+library(fGarch)
+library(vars)
+library(devtools)
+library(imputeTS)
+library(urca)
+library(CausalImpact)
+```
+
+# Modelo Causal Impact
+
+Para realizar este modelo entre las series temporales de estas empresas se extraen los datos de cotización de ambas (desde el 1 de enero de 2014 hasta el 12 de diciembre de 2020), y se selecciona el precio ajustado que será con el que se trabaje. A continuación, visualizamos la series por separado:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+
+bmwData <- getSymbols("BMW.DE", from="2014-01-01", to="2020-12-12", auto.assign=FALSE) 
+bmwdata <- bmwData[,6]
+volData <- getSymbols("VOW3.DE", from="2014-01-01", to="2020-12-12", auto.assign=FALSE) 
+voldata <- volData[,6]
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+plot(bmwdata$BMW.DE.Adjusted, main = "Cotización BMW")
+plot(voldata$VOW3.DE.Adjusted, main = "Cotización Volkswagen")
+```
+
+De cara a estimar el modelo causal, seleccionamos una fecha concreta que será el momento en el que se destapó el Dieselgate. En septiembre de 2015, se descubrió que Volkswagen había estado utilizando ilegalmente un software que alteraba los resultados de las emisiones de gases contaminantes en 11 millones de sus vehículos con motor diesel vendidos entre 2009 y 2015.
+Por ello, se elige la fecha del 1 de septiembre de 2015 como el punto de corte para realizar este modelo.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+vol_bmw <- cbind(voldata, bmwdata)
+bmw_vol <- cbind(bmwdata, voldata)
+vol_bmw <- na.omit(vol_bmw)
+bmw_vol <- na.omit(bmw_vol)
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+pre_period <- as.Date(c("2014-01-01", "2015-08-31"))
+post_period <- as.Date(c("2015-09-01", "2020-12-12"))
+```
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+causal_vol <- CausalImpact(vol_bmw,
+                             pre.period = pre_period, 
+                             post.period = post_period)
+causal_bmw <- CausalImpact(bmw_vol, 
+                             pre.period = pre_period, 
+                             post.period = post_period)
+```
+
+Haciendo un "summary" se pueden observar las principales métricas del modelo construido:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+summary(causal_vol)
+```
+
+Se puede visualizar haciendo diversos plots, el acumulado, el "pointwise" y el original, en el cual nos centraremos, y por ello calculamos también a parte.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+plot(causal_vol)
+plot(causal_vol, "original")
+```
+
+En color negro se puede visualizar la cotización de Volkswagen y su acusada caída a raíz del Dieselgate. Por contra, se observa que en color azul la predicción que realiza el modelo en caso de no haber existido tal evento imprevisto. Los resultados habrían sido claramente mejores. La gráfica acumulada muestra claramente el descenso desde que se produce la intervención.
+A partir de este modelo causal, se puede generar automáticamente un report con los datos extraidos del modelo.
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+summary(causal_vol, "report")
+```
+
+Como se extrae del report, la intervención tuvo un efecto negativo sobre Volkswagen. Según el propio modelo, si la intervención no hubiera ocurrido el valor medio de esta empresa en el periodo postintervención habría sido superior. Sin embargo, el report indica que este efecto no es estadísticamente significativo y ese hecho se apoya en el p-valor obtenido.
+
+A continuación, estimamos un modelo causal pero esta vez para ver los efectos directamente sobre BMW:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+summary(causal_bmw)
+```
+
+Gráficamente:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+plot(causal_bmw)
+plot(causal_bmw, "original")
+```
+
+Como se puede observar facilmente, ocurrió el efecto inverso en el caso de BMW. A raíz de la intervención aumentó su cotización mientras que si no hubiera ocurrido la intervención el resultado sería claramente peor. La gráfica acumulada recoge el aumento de BMW a partir del punto de corte calculado. 
+Leyendo el report:
+
+```{r echo=FALSE, warning=FALSE, message=FALSE}
+summary(causal_bmw, "report")
+```
+
+El report ofrece métricas similares al caso anterior, en este caso señalando que el valor de BMW habría sido más bajo si el Dieselgate no hubiera ocurrido. Sin embargo, sigue señalando que es un efecto estadísticamente no significativo y que puede ser una afectación espúrea.
+
+## Conclusiones
+
+A la vista de los resultados,se ha podido observar que cuando una de las empresas se vio perjudicada por el descubrimiento de una práctica ilegal (Volkswagen), la otra salió beneficiada (BMW). Sin embargo, en ambos casos se reseña el hecho de que los resultados no son estadísticamente significativos.
+
+En definitiva, los resultados obtenidos por BMW fueron mejor de lo esperado gracias al caso de Dieselgate, obteniendo de esta forma beneficios y cremiento. Por otro lado, como no podría ser de otra forma Volkswagen fue la gran perjudicada tras destaparse el escándalo de emisión de gases contaminantes en sus vehículos.
